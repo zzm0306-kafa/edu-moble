@@ -14,13 +14,39 @@
         <div class="username">当前账号：{{ username }}</div>
       </van-cell>
       <van-cell class="pay-channel">
-        <div class="title">⽀付⽅式</div>
+        <div>
+          <p>⽀付⽅式</p>
+          <van-radio-group v-model="radio">
+            <van-cell-group>
+              <van-cell @click="radio = payInfo[1].channelCode">
+                <template #title>
+                  <img src="http://www.lgstatic.com/lg-app-fed/pay/images/wechat_b787e2f4.png" alt="">
+                  <span>微信⽀付</span>
+                </template>
+                <template #right-icon>
+                  <van-radio name="1" />
+                </template>
+              </van-cell>
+              <van-cell @click="radio = payInfo[0].channelCode">
+                 <template #title>
+                  <img src="http://www.lgstatic.com/lg-app-fed/pay/images/ali_ed78fdae.png" alt="">
+                  <span>⽀付宝⽀付</span>
+                </template>
+                <template #right-icon>
+                  <van-radio name="2" />
+                </template>
+              </van-cell>
+            </van-cell-group>
+          </van-radio-group>
+        </div>
+        <van-button @click="handlePay">￥{{ course.discounts }} ⽴即⽀付</van-button>
       </van-cell>
     </van-cell-group>
   </div>
 </template>
 <script>
 import { getCourseById } from '@/services/course'
+import { createOrder, getPayInfo, initPayment, getPayResult } from '@/services/pay'
 export default {
   name: 'CoursePay',
   props: {
@@ -31,19 +57,63 @@ export default {
   },
   data () {
     return {
-      course: {}
+      course: {},
+      radio: '1',
+      // 创建订单号
+      orderNo: null,
+      // 支付方式
+      payInfo: {}
     }
   },
   created () {
+    // 加载课程信息
     this.loadCourse()
+    // 加载订单信息
+    this.loadOrder()
   },
   methods: {
+    // 发起支付
+    async handlePay () {
+      const { data } = await initPayment({
+        goodsOrderNo: this.orderNo,
+        channel: this.radio === 1 ? 'weChat' : 'aliPay',
+        returnUrl: 'http://edufront.lagounews.com/'
+      })
+      // 接收响应地址，并进⾏跳转
+      window.location.href = data.content.payUrl
+      const timer = setInterval(async () => {
+        const { data: payResult } = await getPayResult({
+          orderNo: data.content.orderNo
+        })
+        // 如果⽀付结果成功，清除定时器，并提示购买成功，跳回到学习页
+        if (payResult.content && payResult.content.status === 2) {
+          clearInterval(timer)
+          this.$toast.success('购买成功')
+          this.$router.push({
+            name: 'learn'
+          })
+        }
+      })
+    },
+    // 创建订单，获取订单号
+    async loadOrder () {
+      const { data } = await createOrder({
+        goodsId: this.courseId
+      })
+      this.orderNo = data.content.orderNo
+      console.log(data)
+      // 获取支付方式
+      const { data: payInfo } = await getPayInfo({
+        shopOrderNo: this.orderNo
+      })
+      this.payInfo = payInfo.content.supportChannels
+    },
+    // 获取课程信息
     async loadCourse () {
       const { data } = await getCourseById({
         courseId: this.courseId
       })
       this.course = data.content
-      console.log(data)
     }
   },
   // 对用户账号进行遮蔽
@@ -54,7 +124,7 @@ export default {
   }
 }
 </script>
-<style lang="scss">
+<style lang="scss" scoped>
 .course-pay {
   position: absolute;
   width: 100%;
@@ -113,5 +183,38 @@ export default {
 .account-info .username {
   margin: 20px 0 10px;
   font-size: 16px;
+}
+// 支付区域
+.pay-channel {
+  flex: 1;
+}
+// 让radio与按钮在上下两端
+.pay-channel .van-cell__value {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.pay-channel .van-cell {
+  padding: 20px 10px;
+}
+// 左侧标题插槽
+.pay-channel .van-cell__title {
+  display: flex;
+  align-items: center;
+}
+.pay-channel .van-cell img {
+  width: 28px;
+  height: 28px;
+}
+.pay-channel .van-cell span {
+  font-size: 16px;
+  margin-left: 10px;
+}
+// 底部按钮
+.pay-channel .van-button {
+  background: linear-gradient(270deg,#faa83e,#fbc546);
+  border-radius: 20px;
+  margin-bottom: 5px;
+  font-size: 18px;
 }
 </style>
